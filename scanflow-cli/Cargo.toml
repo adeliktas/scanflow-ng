@@ -1,23 +1,28 @@
 [package]
 name = "scanflow-cli"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Aurimas Blažulionis <0x60@pm.me>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
-description = "memory scanner frontent CLI"
+description = "memory scanner frontend CLI"
 documentation = "https://docs.rs/scanflow"
-categories = [ "command-line-utilities", "parsing", "os", "memory-management" ]
-keywords = [ "scanflow", "memflow", "cheatengine", "memory", "dma" ]
+categories = ["command-line-utilities", "parsing", "os", "memory-management"]
+keywords = ["scanflow", "memflow", "cheatengine", "memory", "dma"]
 repository = "https://github.com/h33p/scanflow"
 readme = "../README.md"
 
 [dependencies]
 memflow = "0.2"
-simplelog = "0.8.0"
-scan_fmt = "0.2.5"
 scanflow = { version = "0.3", path = "../scanflow", features = ["progress_bar"] }
-clap = { version = "3", features = ["cargo"] }
-either = "1"
+clap = { version = "4", features = ["derive", "cargo", "env"] }
+rustyline = { version = "18", features = ["derive"] }
+# `simplelog` stays for stderr logging; replaced with `log` + `simplelog` at
+# the latest versions. `scan_fmt` and `sudo` removed (sudo handled inline).
+simplelog = "0.12"
 log = "0.4"
-sudo = "0.6"
-rayon = "1.7"
+either = "1"
+rayon = "1.10"
+
+# Inline privilege escalation on unix replaces the `sudo` crate.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
