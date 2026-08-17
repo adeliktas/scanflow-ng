@@ -184,6 +184,24 @@ pub struct SessionInfo {
     pub target: String,
 }
 
+/// Outcome of [`SessionManager::attach_process`]: either a created session,
+/// or a structured error the caller (MCP tool) should surface to the user.
+#[derive(Debug)]
+pub enum AttachOutcome {
+    /// A session was created; this is its id.
+    Session(String),
+    /// Several processes matched the name — the caller should show these
+    /// candidates (pid/name/state) and ask the user to re-call with `pid`.
+    Ambiguous {
+        program: String,
+        candidates: Vec<ProcessInfo>,
+    },
+    /// No process matched the name.
+    NotFound(String),
+    /// Neither `program` nor `pid` was supplied.
+    NoTarget,
+}
+
 /// Owns the memflow inventory and all active sessions.
 pub struct SessionManager {
     /// memflow plugin inventory. Guarded by a sync mutex because
@@ -201,22 +219,55 @@ impl SessionManager {
         }
     }
 
-    /// Build an OS chain, attach to `program`, and store a process session.
-    /// Returns the new session id.
+    /// Build an OS chain and attach to a process by name or PID.
+    ///
+    /// `pid` takes precedence over `program`. If neither is given, returns
+    /// [`AttachOutcome::NoTarget`]. If `program` matches several processes,
+    /// returns [`AttachOutcome::Ambiguous`] with the candidate list (so the
+    /// caller — e.g. the MCP tool — can surface the PIDs to the user instead
+    /// of silently grabbing the first).
     pub fn attach_process(
         &self,
         connectors: &[String],
         os: &[String],
-        program: &str,
-    ) -> Result<String> {
+        program: Option<&str>,
+        pid: Option<u32>,
+    ) -> Result<AttachOutcome> {
         let chain = build_os_chain(connectors, os)?;
-        let os_inst = {
+        let mut os_inst = {
             let mut inv = self.inventory.lock().unwrap();
             inv.builder().os_chain(chain).build()?
         };
-        let process = os_inst.into_process_by_name(program)?;
-        let session = Session::for_process(process);
-        self.store(AnySession::Process(session))
+
+        if let Some(pid) = pid {
+            let process = os_inst.into_process_by_pid(pid)?;
+            let id = self.store(AnySession::Process(Session::for_process(process)))?;
+            return Ok(AttachOutcome::Session(id));
+        }
+
+        let name = match program {
+            Some(n) => n,
+            None => return Ok(AttachOutcome::NoTarget),
+        };
+
+        let matching: Vec<ProcessInfo> = os_inst
+            .process_info_list()?
+            .into_iter()
+            .filter(|i| i.name.as_ref() == name)
+            .collect();
+
+        match matching.len() {
+            0 => Ok(AttachOutcome::NotFound(name.to_string())),
+            1 => {
+                let process = os_inst.into_process_by_info(matching.into_iter().next().unwrap())?;
+                let id = self.store(AnySession::Process(Session::for_process(process)))?;
+                Ok(AttachOutcome::Session(id))
+            }
+            _ => Ok(AttachOutcome::Ambiguous {
+                program: name.to_string(),
+                candidates: matching,
+            }),
+        }
     }
 
     /// Build a connector chain and store a raw memory view session.

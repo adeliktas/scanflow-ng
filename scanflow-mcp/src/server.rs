@@ -37,19 +37,57 @@ impl ScanflowServer {
     // ---- session lifecycle ----
 
     #[tool(
-        description = "Attach to a process by name and create a new scan session. `connectors` and `os` are memflow chain entries (e.g. connectors=[\"qemu_procfs\"], os=[\"win32\"]). Returns the new session id."
+        description = "Attach to a process and create a new scan session. `connectors` and `os` are memflow chain entries (e.g. connectors=[\"qemu_procfs\"], os=[\"win32\"]). Open by `program` name or by `pid`. If several processes share the name, the error lists all candidate PIDs — re-call with `pid` to pick one. Returns the new session id."
     )]
     async fn attach_process(
         &self,
         Parameters(args): Parameters<AttachProcessArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let id = self
+        use crate::session_mgr::AttachOutcome;
+        let outcome = self
             .mgr
-            .attach_process(&args.connectors, &args.os, &args.program)
+            .attach_process(
+                &args.connectors,
+                &args.os,
+                args.program.as_deref(),
+                args.pid,
+            )
             .map_err(mcp_err)?;
-        text_result(
-            serde_json::json!({ "session_id": id, "kind": "process", "program": args.program }),
-        )
+        match outcome {
+            AttachOutcome::Session(id) => {
+                text_result(serde_json::json!({ "session_id": id, "kind": "process" }))
+            }
+            AttachOutcome::Ambiguous {
+                program,
+                candidates,
+            } => {
+                let list = candidates
+                    .iter()
+                    .map(|c| format!("pid={} name={} state={:?}", c.pid, c.name, c.state))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                Err(McpError::new(
+                    ErrorCode::INVALID_PARAMS,
+                    format!(
+                        "{} processes are named `{}`; re-call attach_process with `pid` to pick one. Candidates: {}",
+                        candidates.len(),
+                        program,
+                        list,
+                    ),
+                    None,
+                ))
+            }
+            AttachOutcome::NotFound(name) => Err(McpError::new(
+                ErrorCode::RESOURCE_NOT_FOUND,
+                format!("no process named `{}` is running", name),
+                None,
+            )),
+            AttachOutcome::NoTarget => Err(McpError::new(
+                ErrorCode::INVALID_PARAMS,
+                "attach_process requires `program` or `pid`".to_string(),
+                None,
+            )),
+        }
     }
 
     #[tool(
@@ -410,7 +448,10 @@ fn parse_hex_bytes(s: &str) -> Result<Vec<u8>, McpError> {
 pub struct AttachProcessArgs {
     pub connectors: Vec<String>,
     pub os: Vec<String>,
-    pub program: String,
+    /// Process name to open. Mutually exclusive with `pid`; `pid` wins if both are given.
+    pub program: Option<String>,
+    /// Exact PID to open. Use when several processes share `program`.
+    pub pid: Option<u32>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
