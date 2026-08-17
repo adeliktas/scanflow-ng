@@ -38,6 +38,11 @@ pub struct Cli {
     #[arg(short = 'p', long = "program", global = true)]
     pub program: Option<String>,
 
+    /// Attach to a specific process by PID instead of by name (OS mode).
+    /// Use this when multiple processes share the same `--program` name.
+    #[arg(short = 'P', long = "pid", global = true)]
+    pub pid: Option<u32>,
+
     /// REPL history file. Defaults to `~/.scanflow_history`.
     #[arg(long = "history-file", global = true)]
     pub history_file: Option<PathBuf>,
