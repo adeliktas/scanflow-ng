@@ -1,126 +1,131 @@
-use clap::*;
+//! scanflow-cli entry point.
+//!
+//! Parses arguments, optionally elevates privileges (unix), initializes
+//! logging, builds the memflow inventory/chain, wraps the resulting process
+//! or memory view in a [`scanflow::Session`], and dispatches either to the
+//! interactive REPL or to a one-shot subcommand.
+
+use std::process;
+
+use clap::Parser;
 use either::{Either, Left, Right};
-use log::Level;
-
-use memflow::prelude::v1::{Result, *};
-
-use simplelog::{Config, TermLogger, TerminalMode};
-
-#[macro_use]
-extern crate scan_fmt;
+use memflow::prelude::v1::*;
+use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 
 mod cli;
+mod commands;
+mod render;
+mod repl;
+
+use cli::{log_level, Cli, Command};
+use scanflow::Session;
 
 fn main() -> Result<()> {
-    let matches = parse_args();
-    let (chain, target, elevate, level) = extract_args(&matches)?;
+    let cli = Cli::parse();
 
-    if elevate {
-        #[cfg(unix)]
-        sudo::escalate_if_needed().expect("failed to elevate privileges");
-        #[cfg(windows)]
-        log::warn!("elevation not supported on windows!");
+    if cli.elevate {
+        escalate_if_needed();
     }
 
     TermLogger::init(
-        level.to_level_filter(),
+        log_level(cli.verbose).to_level_filter(),
         Config::default(),
         TerminalMode::Mixed,
+        ColorChoice::Auto,
     )
-    .unwrap();
+    .ok();
 
-    let inventory = Inventory::scan();
+    let mut inventory = Inventory::scan();
+
+    let chain = build_chain(&cli)?;
 
     match chain {
-        Left(chain) => {
-            let target = target.expect("In OS mode target program must be supplied");
-            let os = inventory.builder().os_chain(chain).build()?;
-            let process = os.into_process_by_name(&target)?;
-            cli::run(process)
+        Left(os_chain) => {
+            let program = cli
+                .program
+                .as_deref()
+                .expect("in OS mode a target program (-p/--program) must be supplied");
+            let os = inventory.builder().os_chain(os_chain).build()?;
+            let process = os.into_process_by_name(program)?;
+            let session = Session::for_process(process);
+            run_process(session, cli.subcommand, cli.history_file)
         }
-        Right(chain) => {
-            let conn = inventory.builder().connector_chain(chain).build()?;
-            cli::run_with_view(conn.into_phys_view())
+        Right(conn_chain) => {
+            let conn = inventory.builder().connector_chain(conn_chain).build()?;
+            let view = conn.into_phys_view();
+            let session = Session::for_view(view);
+            run_view(session, cli.subcommand)
         }
     }
 }
 
-fn parse_args() -> ArgMatches {
-    Command::new("scanflow-cli")
-        .version(crate_version!())
-        .author(crate_authors!())
-        .arg(Arg::new("verbose").short('v').multiple_occurrences(true))
-        .arg(
-            Arg::new("connector")
-                .long("connector")
-                .short('c')
-                .takes_value(true)
-                .required(false)
-                .multiple_occurrences(true),
-        )
-        .arg(
-            Arg::new("os")
-                .long("os")
-                .short('o')
-                .takes_value(true)
-                .required(false)
-                .multiple_occurrences(true),
-        )
-        .arg(
-            Arg::new("elevate")
-                .long("elevate")
-                .short('e')
-                .required(false),
-        )
-        .arg(Arg::new("program").takes_value(true).required(false))
-        .get_matches()
+/// Build either an OsChain (if both connectors and os entries resolve) or a
+/// ConnectorChain (raw memory view). Mirrors the original `extract_args`.
+/// The memflow chain builders consume `(index, &str)` pairs (the index is the
+/// occurrence position among repeated args).
+fn build_chain(cli: &Cli) -> Result<Either<OsChain, ConnectorChain>> {
+    let conn_it = || cli.connector.iter().enumerate().map(|(i, s)| (i, s.as_str()));
+    let os_it = || cli.os.iter().enumerate().map(|(i, s)| (i, s.as_str()));
+
+    if let Ok(chain) = OsChain::new(conn_it(), os_it()) {
+        return Ok(Left(chain));
+    }
+    ConnectorChain::new(conn_it(), os_it()).map(Right)
 }
 
-fn extract_args(
-    matches: &ArgMatches,
-) -> Result<(
-    Either<OsChain, ConnectorChain>,
-    Option<&str>,
-    bool,
-    log::Level,
-)> {
-    // set log level
-    let level = match matches.occurrences_of("verbose") {
-        0 => Level::Error,
-        1 => Level::Warn,
-        2 => Level::Info,
-        3 => Level::Debug,
-        4 => Level::Trace,
-        _ => Level::Trace,
-    };
-
-    let conn_iter = matches
-        .indices_of("connector")
-        .zip(matches.values_of("connector"))
-        .map(|(a, b)| a.zip(b))
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-
-    let os_iter = matches
-        .indices_of("os")
-        .zip(matches.values_of("os"))
-        .map(|(a, b)| a.zip(b))
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-
-    Ok((
-        if let Ok(chain) = OsChain::new(conn_iter.iter().copied(), os_iter.iter().copied()) {
-            Left(chain)
-        } else {
-            Right(ConnectorChain::new(
-                conn_iter.into_iter(),
-                os_iter.into_iter(),
-            )?)
+fn run_process<T>(mut session: Session<T>, sub: Option<Command>, history: Option<std::path::PathBuf>) -> Result<()>
+where
+    T: Process + MemoryView + Clone + Send + 'static,
+{
+    match sub.unwrap_or(Command::Repl) {
+        Command::Repl => match history {
+            Some(h) => repl::run_process_with_history(session, h),
+            None => repl::run_process(session),
         },
-        matches.value_of("program"),
-        matches.occurrences_of("elevate") > 0,
-        level,
-    ))
+        sub => commands::dispatch_process(&mut session, sub),
+    }
+}
+
+fn run_view<T>(mut session: Session<T>, sub: Option<Command>) -> Result<()>
+where
+    T: MemoryView + Clone + Send + 'static,
+{
+    match sub.unwrap_or(Command::Repl) {
+        Command::Repl => repl::run_view(session),
+        sub => commands::dispatch_view(&mut session, sub),
+    }
+}
+
+/// Privilege escalation. Replaces the `sudo` crate: on unix, if not already
+/// root, re-exec the current binary through `sudo`. On non-unix this is a no-op.
+fn escalate_if_needed() {
+    #[cfg(unix)]
+    {
+        unsafe {
+            if libc::geteuid() == 0 {
+                return;
+            }
+        }
+        let exe = match std::env::current_exe() {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        let status = process::Command::new("sudo")
+            .arg(&exe)
+            .args(&args)
+            .status();
+        match status {
+            Ok(s) if s.success() => process::exit(0),
+            Ok(s) => process::exit(s.code().unwrap_or(1)),
+            Err(e) => {
+                eprintln!("failed to re-exec via sudo: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        log::warn!("elevation not supported on this platform");
+    }
 }
