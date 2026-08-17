@@ -1,0 +1,22 @@
+[package]
+name = "scanflow"
+version = "0.2.1"
+authors = ["Aurimas Blažulionis <0x60@pm.me>"]
+edition = "2018"
+license = "MIT"
+description = "memory scanning library based on memflow"
+documentation = "https://docs.rs/scanflow"
+categories = [ "parsing", "os", "memory-management" ]
+keywords = [ "scanflow", "memflow", "cheatengine", "memory", "dma" ]
+repository = "https://github.com/h33p/scanflow"
+readme = "../README.md"
+
+[dependencies]
+memflow = "0.2"
+iced-x86 = "1.10.0"
+pbr = { version = "1.0", optional = true }
+rayon = "1.5"
+rayon-tlsctx = "0.2"
+
+[features]
+progress_bar = ["pbr"]

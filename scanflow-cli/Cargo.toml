@@ -1,0 +1,23 @@
+[package]
+name = "scanflow-cli"
+version = "0.2.1"
+authors = ["Aurimas Blažulionis <0x60@pm.me>"]
+edition = "2018"
+license = "MIT"
+description = "memory scanner frontent CLI"
+documentation = "https://docs.rs/scanflow"
+categories = [ "command-line-utilities", "parsing", "os", "memory-management" ]
+keywords = [ "scanflow", "memflow", "cheatengine", "memory", "dma" ]
+repository = "https://github.com/h33p/scanflow"
+readme = "../README.md"
+
+[dependencies]
+memflow = "0.2"
+simplelog = "0.8.0"
+scan_fmt = "0.2.5"
+scanflow = { version = "0.2", path = "../scanflow", features = ["progress_bar"] }
+clap = { version = "3", features = ["cargo"] }
+either = "1"
+log = "0.4"
+sudo = "0.6"
+rayon = "1.7"
