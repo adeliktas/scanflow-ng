@@ -41,16 +41,39 @@ fn main() -> Result<()> {
 
     match chain {
         Left(os_chain) => {
-            let program = cli
-                .program
-                .as_deref()
-                .expect("in OS mode a target program (-p/--program) must be supplied");
             let os = inventory.builder().os_chain(os_chain).build()?;
-            let process = os.into_process_by_name(program)?;
+            let program = match cli.program.as_deref() {
+                Some(p) => p,
+                None => {
+                    eprintln!("error: in OS mode a target program (-p/--program) or --pid must be supplied");
+                    return Err(ErrorKind::ArgValidation.into());
+                }
+            };
+            let process = open_process(os, program, cli.pid)?;
             let session = Session::for_process(process);
             run_process(session, cli.subcommand, cli.history_file)
         }
         Right(conn_chain) => {
+            // View mode (raw physical memory). A target program can't be
+            // opened here — if the user supplied -p, they meant process mode
+            // and are missing an OS layer (e.g. --os win32). Error clearly
+            // instead of silently dropping -p and scanning huge physical RAM.
+            if cli.program.is_some() || cli.pid.is_some() {
+                eprintln!(
+                    "error: a target process ({} {}) was requested, but the chain resolves to a\n\
+                     raw memory view, not an OS. To open a process by name you need an OS\n\
+                     layer: add e.g. `--os win32`, or use an OS plugin (like `qemu_procfs`)\n\
+                     as the connector.\n\
+                     Example:  scanflow-cli -c kvm --os win32 -p {}",
+                    cli.program
+                        .as_deref()
+                        .map(|n| format!("--program {n}"))
+                        .unwrap_or_default(),
+                    cli.pid.map(|p| format!("--pid {p}")).unwrap_or_default(),
+                    cli.program.as_deref().unwrap_or("PROCESS"),
+                );
+                return Err(ErrorKind::ArgValidation.into());
+            }
             let conn = inventory.builder().connector_chain(conn_chain).build()?;
             let view = conn.into_phys_view();
             let session = Session::for_view(view);
@@ -112,6 +135,48 @@ where
     }
 }
 
+/// Open a process from an OS instance, selecting by PID or by name.
+///
+/// - `pid = Some(p)` -> open that exact PID.
+/// - `pid = None`, `program` matches exactly one process -> open it.
+/// - `pid = None`, `program` matches several -> print all candidates (PID +
+///   name + state) and return an error telling the user to re-run with
+///   `--pid`, instead of silently grabbing the first/random one.
+/// - `pid = None`, no match -> error.
+pub(crate) fn open_process<O: Os>(
+    mut os: O,
+    program: &str,
+    pid: Option<u32>,
+) -> Result<O::IntoProcessType> {
+    if let Some(pid) = pid {
+        return os.into_process_by_pid(pid);
+    }
+
+    let infos = os.process_info_list()?;
+    let matching: Vec<ProcessInfo> = infos
+        .into_iter()
+        .filter(|i| i.name.as_ref() == program)
+        .collect();
+
+    match matching.len() {
+        0 => {
+            eprintln!("error: no process named `{}` is running", program);
+            Err(ErrorKind::ModuleNotFound.into())
+        }
+        1 => os.into_process_by_info(matching.into_iter().next().unwrap()),
+        n => {
+            eprintln!(
+                "error: {} processes are named `{}`; re-run with --pid to pick one:",
+                n, program
+            );
+            for m in &matching {
+                eprintln!("  pid={} name={} state={:?}", m.pid, m.name, m.state);
+            }
+            Err(ErrorKind::ArgValidation.into())
+        }
+    }
+}
+
 /// Privilege escalation. Replaces the `sudo` crate: on unix, if not already
 /// root, re-exec the current binary through `sudo`. On non-unix this is a no-op.
 fn escalate_if_needed() {
@@ -140,5 +205,59 @@ fn escalate_if_needed() {
     #[cfg(not(unix))]
     {
         log::warn!("elevation not supported on this platform");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for `open_process` process selection (unique name, ambiguous name,
+    //! PID selection, not-found). Uses memflow's in-process `DummyOs`. Every
+    //! dummy process is named "Dummy", so allocating two gives an ambiguous
+    //! name.
+
+    use super::open_process;
+    use memflow::dummy::{DummyMemory, DummyOs};
+    use memflow::prelude::v1::*;
+
+    fn os_with_procs(n: usize) -> DummyOs {
+        let mem = DummyMemory::new(size::mb(16));
+        let mut os = DummyOs::new(mem);
+        for _ in 0..n {
+            os.alloc_process(size::mb(2), &[]);
+        }
+        os
+    }
+
+    #[test]
+    fn unique_name_opens() {
+        let os = os_with_procs(1);
+        let res = open_process(os, "Dummy", None);
+        assert!(res.is_ok(), "a single matching process should open");
+    }
+
+    #[test]
+    fn ambiguous_name_errors() {
+        let os = os_with_procs(3);
+        let res = open_process(os, "Dummy", None);
+        assert!(
+            res.is_err(),
+            "multiple same-named processes must error instead of grabbing one"
+        );
+    }
+
+    #[test]
+    fn pid_selection_opens() {
+        let mem = DummyMemory::new(size::mb(16));
+        let mut os = DummyOs::new(mem);
+        let pid = os.alloc_process(size::mb(2), &[]);
+        let res = open_process(os, "ignored-name", Some(pid));
+        assert!(res.is_ok(), "selecting by exact PID should succeed");
+    }
+
+    #[test]
+    fn not_found_errors() {
+        let os = os_with_procs(1);
+        let res = open_process(os, "does-not-exist", None);
+        assert!(res.is_err(), "a non-matching name should error");
     }
 }

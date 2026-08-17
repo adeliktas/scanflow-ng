@@ -85,22 +85,18 @@ impl CompiledPattern {
         self.pattern.is_empty()
     }
 
-    /// Find all match start addresses of this pattern inside `buf`, where
-    /// `buf[0]` corresponds to `base_addr`.
-    pub fn find_matches(&self, buf: &[u8], base_addr: Address) -> Vec<Address> {
-        let mut matches = Vec::new();
+    /// Find all match start *indices* (relative to `buf`) of this pattern.
+    /// Like [`find_matches`] but returns offsets instead of absolute addresses.
+    pub fn find_in(&self, buf: &[u8]) -> Vec<usize> {
+        let mut out = Vec::new();
         let pat_len = self.pattern.len();
         if buf.len() < pat_len {
-            return matches;
+            return out;
         }
-
         let anchor = self.anchor;
         let anchor_byte = self.pattern[anchor];
-
         match anchor_byte {
             Some(byte) => {
-                // memchr finds occurrences of the anchor byte; each candidate
-                // pattern start is `pos - anchor`.
                 let search_end = buf.len() - pat_len + anchor + 1;
                 let mut from = 0;
                 while from < search_end {
@@ -111,20 +107,28 @@ impl CompiledPattern {
                     if found >= anchor {
                         let start = found - anchor;
                         if start + pat_len <= buf.len() && self.matches_at(buf, start) {
-                            matches.push(base_addr + start as umem);
+                            out.push(start);
                         }
                     }
                     from = found + 1;
                 }
             }
             None => {
-                // All-wildcard pattern: match at every position (rare/edge case).
                 for start in 0..=(buf.len() - pat_len) {
-                    matches.push(base_addr + start as umem);
+                    out.push(start);
                 }
             }
         }
-        matches
+        out
+    }
+
+    /// Find all match start addresses of this pattern inside `buf`, where
+    /// `buf[0]` corresponds to `base_addr`.
+    pub fn find_matches(&self, buf: &[u8], base_addr: Address) -> Vec<Address> {
+        self.find_in(buf)
+            .into_iter()
+            .map(|p| base_addr + p as umem)
+            .collect()
     }
 
     /// Verify the full pattern against `buf` starting at `start`.
@@ -140,7 +144,18 @@ impl CompiledPattern {
     }
 }
 
-/// Scan a single memory range buffer for a compiled pattern.
+/// Chunk size for streaming signature scans. Reads are done in 16 MiB
+/// windows (with a `pat_len - 1` overlap) so we never try to allocate a
+/// giant buffer for a huge address space (e.g. a raw physical-memory view
+/// whose `max_address` is unbounded).
+const SIG_CHUNK: usize = 16 * 1024 * 1024;
+
+/// Scan a memory range for `pattern`, reading in fixed-size chunks so that
+/// even enormous ranges (raw physical memory) never trigger a giant
+/// allocation. Patterns spanning chunk boundaries are still found thanks to
+/// the `pat_len - 1` overlap. Read failures for individual chunks are
+/// skipped (not fatal) — important for sparse physical memory where some
+/// addresses aren't backed by real RAM.
 pub fn scan_range(
     view: &mut impl MemoryView,
     base: Address,
@@ -148,12 +163,37 @@ pub fn scan_range(
     pattern: &CompiledPattern,
 ) -> Result<Vec<Address>> {
     let pat_len = pattern.len();
-    if (size as usize) < pat_len {
+    let size = size as usize;
+    if size < pat_len {
         return Ok(Vec::new());
     }
-    let mut buf = vec![0u8; size as usize];
-    view.read_raw_into(base, &mut buf).data_part()?;
-    Ok(pattern.find_matches(&buf, base))
+
+    let mut matches = Vec::new();
+    let mut offset = 0usize;
+    while offset < size {
+        let remaining = size - offset;
+        let read_len = std::cmp::min(SIG_CHUNK, remaining);
+        // Read `pat_len - 1` extra bytes past the chunk so patterns that
+        // straddle the boundary are caught in this chunk (not the next),
+        // avoiding both missed and duplicate matches.
+        let want = std::cmp::min(read_len + pat_len.saturating_sub(1), remaining);
+        let mut buf = vec![0u8; want];
+        // Skip chunks that can't be read (sparse/unmapped physical memory).
+        if view
+            .read_raw_into(base + offset as umem, &mut buf)
+            .data_part()
+            .is_ok()
+        {
+            for p in pattern.find_in(&buf) {
+                matches.push(base + (offset + p) as umem);
+            }
+        }
+        if remaining <= read_len {
+            break;
+        }
+        offset += read_len;
+    }
+    Ok(matches)
 }
 
 /// Convenience: scan a set of memory ranges and report timing.

@@ -26,3 +26,6 @@ rayon = "1.10"
 # Inline privilege escalation on unix replaces the `sudo` crate.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+memflow = { version = "0.2", features = ["dummy_mem"] }
