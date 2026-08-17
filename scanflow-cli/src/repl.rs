@@ -87,13 +87,17 @@ where
             Err(_) => break,
         };
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let _ = rl.add_history_entry(line);
         let (cmd, args) = split_cmd(line);
         match handle_process_cmd(&mut session, cmd, args)? {
             Handled::Quit => break,
             Handled::Continue => {}
-            Handled::Fallthrough => { handle_view_cmd(&mut session, cmd, args)?; }
+            Handled::Fallthrough => {
+                handle_view_cmd(&mut session, cmd, args)?;
+            }
         }
     }
     let _ = rl.save_history(&history);
@@ -114,7 +118,9 @@ where
             Err(_) => break,
         };
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let _ = rl.add_history_entry(line);
         let (cmd, args) = split_cmd(line);
         // View mode: no builtin quit/help path through process handler; check
@@ -122,7 +128,9 @@ where
         match handle_builtin(&mut session, cmd, args, false) {
             Handled::Quit => break,
             Handled::Continue => {}
-            Handled::Fallthrough => { handle_view_cmd(&mut session, cmd, args)?; }
+            Handled::Fallthrough => {
+                handle_view_cmd(&mut session, cmd, args)?;
+            }
         }
     }
     let _ = rl.save_history(&history);
@@ -206,8 +214,8 @@ where
             session.set_type(type_name, len)
         }
         "add" | "a" => {
-            let addr = u64::from_str_radix(args.trim(), 16)
-                .map_err(|_| ErrorKind::InvalidArgument)?;
+            let addr =
+                u64::from_str_radix(args.trim(), 16).map_err(|_| ErrorKind::InvalidArgument)?;
             session.add_match(addr.into());
             Ok(())
         }
@@ -283,8 +291,8 @@ where
             Ok(Handled::Continue)
         }
         "sigmaker" | "s" => {
-            let addr = u64::from_str_radix(args.trim(), 16)
-                .map_err(|_| ErrorKind::InvalidArgument)?;
+            let addr =
+                u64::from_str_radix(args.trim(), 16).map_err(|_| ErrorKind::InvalidArgument)?;
             let sigs = session.sigmaker(addr.into())?;
             println!("Found signatures:");
             for sig in &sigs {
@@ -348,13 +356,20 @@ where
     let target = if idx == "*" {
         WriteTarget::All
     } else {
-        WriteTarget::One(idx.parse::<usize>().map_err(|_| ErrorKind::InvalidArgument)?)
+        WriteTarget::One(
+            idx.parse::<usize>()
+                .map_err(|_| ErrorKind::InvalidArgument)?,
+        )
     };
 
     match mode {
         "o" => {
             let n = session.write_value(target, value)?;
-            println!("Write done ({} location{})", n, if n == 1 { "" } else { "s" });
+            println!(
+                "Write done ({} location{})",
+                n,
+                if n == 1 { "" } else { "s" }
+            );
             Ok(())
         }
         "c" => continuous_write(session, target, value),
@@ -379,15 +394,15 @@ where
 
     let matches: Vec<Address> = match target {
         WriteTarget::All => session.matches().to_vec(),
-        WriteTarget::One(i) => vec![*session
-            .matches()
-            .get(i)
-            .ok_or(ErrorKind::InvalidArgument)?],
+        WriteTarget::One(i) => vec![*session.matches().get(i).ok_or(ErrorKind::InvalidArgument)?],
     };
     let stop = Arc::new(AtomicBool::new(false));
     let stop_w = stop.clone();
 
-    println!("Continuous write to {} address(es). Press Enter to stop...", matches.len());
+    println!(
+        "Continuous write to {} address(es). Press Enter to stop...",
+        matches.len()
+    );
     let handle = std::thread::spawn(move || {
         while !stop_w.load(Ordering::Relaxed) {
             for &m in &matches {

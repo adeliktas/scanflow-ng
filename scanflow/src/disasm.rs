@@ -43,9 +43,9 @@ impl Disasm {
 
         let ctx = ThreadLocalCtx::new_locked(move || process.clone());
         let ctx_bytes = ThreadLocalCtx::new(|| vec![0; CHUNK_SIZE + 32]);
-        let sections = ThreadLocalCtx::new(|| Vec::<SectionInfo>::new());
+        let sections = ThreadLocalCtx::new(Vec::<SectionInfo>::new);
 
-        let pb = PBar::new(modules.iter().map(|m| m.size as u64).sum::<u64>(), true);
+        let pb = PBar::new(modules.iter().map(|m| m.size).sum::<u64>(), true);
 
         self.map.par_extend(
             modules
@@ -98,7 +98,7 @@ impl Disasm {
                                         DecoderOptions::NONE,
                                     );
 
-                                    decoder.set_ip(addr as u64);
+                                    decoder.set_ip(addr);
 
                                     addr += CHUNK_SIZE as umem;
 
@@ -126,7 +126,7 @@ impl Disasm {
                         .collect::<Vec<_>>()
                         .into_par_iter();
 
-                    pb.add(m.size as u64);
+                    pb.add(m.size);
 
                     Some(ret)
                 })

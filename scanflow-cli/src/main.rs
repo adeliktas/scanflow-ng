@@ -54,7 +54,7 @@ fn main() -> Result<()> {
             let conn = inventory.builder().connector_chain(conn_chain).build()?;
             let view = conn.into_phys_view();
             let session = Session::for_view(view);
-            run_view(session, cli.subcommand)
+            run_view(session, cli.subcommand, cli.history_file)
         }
     }
 }
@@ -63,8 +63,13 @@ fn main() -> Result<()> {
 /// ConnectorChain (raw memory view). Mirrors the original `extract_args`.
 /// The memflow chain builders consume `(index, &str)` pairs (the index is the
 /// occurrence position among repeated args).
-fn build_chain(cli: &Cli) -> Result<Either<OsChain, ConnectorChain>> {
-    let conn_it = || cli.connector.iter().enumerate().map(|(i, s)| (i, s.as_str()));
+fn build_chain(cli: &Cli) -> Result<Either<OsChain<'_>, ConnectorChain<'_>>> {
+    let conn_it = || {
+        cli.connector
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (i, s.as_str()))
+    };
     let os_it = || cli.os.iter().enumerate().map(|(i, s)| (i, s.as_str()));
 
     if let Ok(chain) = OsChain::new(conn_it(), os_it()) {
@@ -73,7 +78,11 @@ fn build_chain(cli: &Cli) -> Result<Either<OsChain, ConnectorChain>> {
     ConnectorChain::new(conn_it(), os_it()).map(Right)
 }
 
-fn run_process<T>(mut session: Session<T>, sub: Option<Command>, history: Option<std::path::PathBuf>) -> Result<()>
+fn run_process<T>(
+    mut session: Session<T>,
+    sub: Option<Command>,
+    history: Option<std::path::PathBuf>,
+) -> Result<()>
 where
     T: Process + MemoryView + Clone + Send + 'static,
 {
@@ -86,12 +95,19 @@ where
     }
 }
 
-fn run_view<T>(mut session: Session<T>, sub: Option<Command>) -> Result<()>
+fn run_view<T>(
+    mut session: Session<T>,
+    sub: Option<Command>,
+    history: Option<std::path::PathBuf>,
+) -> Result<()>
 where
     T: MemoryView + Clone + Send + 'static,
 {
     match sub.unwrap_or(Command::Repl) {
-        Command::Repl => repl::run_view(session),
+        Command::Repl => match history {
+            Some(h) => repl::run_view_with_history(session, h),
+            None => repl::run_view(session),
+        },
         sub => commands::dispatch_view(&mut session, sub),
     }
 }
@@ -111,10 +127,7 @@ fn escalate_if_needed() {
             Err(_) => return,
         };
         let args: Vec<String> = std::env::args().skip(1).collect();
-        let status = process::Command::new("sudo")
-            .arg(&exe)
-            .args(&args)
-            .status();
+        let status = process::Command::new("sudo").arg(&exe).args(&args).status();
         match status {
             Ok(s) if s.success() => process::exit(0),
             Ok(s) => process::exit(s.code().unwrap_or(1)),

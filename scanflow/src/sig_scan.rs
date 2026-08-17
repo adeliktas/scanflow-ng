@@ -183,7 +183,10 @@ mod tests {
     #[test]
     fn parses_literals_and_wildcards() {
         let pat = parse_pattern("4D 85 C0 ? ?? 4D").unwrap();
-        assert_eq!(pat, vec![Some(0x4D), Some(0x85), Some(0xC0), None, None, Some(0x4D)]);
+        assert_eq!(
+            pat,
+            vec![Some(0x4D), Some(0x85), Some(0xC0), None, None, Some(0x4D)]
+        );
     }
 
     #[test]

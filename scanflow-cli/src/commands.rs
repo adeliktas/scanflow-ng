@@ -55,7 +55,11 @@ where
                 WriteTarget::One(idx.ok_or(ErrorKind::InvalidArgument)?)
             };
             let n = session.write_value(target, &value)?;
-            println!("Write done ({} location{})", n, if n == 1 { "" } else { "s" });
+            println!(
+                "Write done ({} location{})",
+                n,
+                if n == 1 { "" } else { "s" }
+            );
             Ok(())
         }
         Command::Print => {
@@ -107,8 +111,7 @@ where
             filter,
         } => {
             let start = Instant::now();
-            let matches =
-                session.offset_scan(use_disasm, lrange, urange, max_depth, filter)?;
+            let matches = session.offset_scan(use_disasm, lrange, urange, max_depth, filter)?;
             println!(
                 "Matches found: {} in {:.2}ms",
                 matches.len(),
@@ -160,7 +163,11 @@ where
                 WriteTarget::One(idx.ok_or(ErrorKind::InvalidArgument)?)
             };
             let n = session.write_value(target, &value)?;
-            println!("Write done ({} location{})", n, if n == 1 { "" } else { "s" });
+            println!(
+                "Write done ({} location{})",
+                n,
+                if n == 1 { "" } else { "s" }
+            );
             Ok(())
         }
         Command::Print => {
