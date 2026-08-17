@@ -1,0 +1,32 @@
+[package]
+name = "scanflow-mcp"
+version = "0.3.0"
+authors = ["scanflow-ng"]
+edition = "2021"
+license = "MIT"
+description = "MCP server exposing scanflow memory-scanning capabilities to AI agents"
+documentation = "https://docs.rs/scanflow"
+categories = ["command-line-utilities", "parsing", "os", "memory-management"]
+keywords = ["scanflow", "memflow", "mcp", "memory", "dma"]
+repository = "https://github.com/h33p/scanflow"
+readme = "../README.md"
+
+[dependencies]
+memflow = "0.2"
+scanflow = { version = "0.3", path = "../scanflow" }
+# MCP server (stdio). Official Rust SDK.
+rmcp = { version = "3", features = ["server", "macros", "transport-io", "schemars"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "fs"] }
+dashmap = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+either = "1"
+uuid = { version = "1", features = ["v4"] }
+hex = "0.4"
+anyhow = "1"
+
+[features]
+default = []

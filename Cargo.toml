@@ -4,9 +4,11 @@ resolver = "2"
 members = [
     "scanflow",
     "scanflow-cli",
+    "scanflow-mcp",
 ]
 
 default-members = [
     "scanflow",
     "scanflow-cli",
+    "scanflow-mcp",
 ]
