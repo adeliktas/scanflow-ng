@@ -7,10 +7,7 @@
 use std::sync::Arc;
 
 use rmcp::{
-    handler::server::{
-        router::tool::ToolRouter,
-        wrapper::Parameters,
-    },
+    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::*,
     schemars,
     service::RequestContext,
@@ -39,7 +36,9 @@ impl ScanflowServer {
 
     // ---- session lifecycle ----
 
-    #[tool(description = "Attach to a process by name and create a new scan session. `connectors` and `os` are memflow chain entries (e.g. connectors=[\"qemu_procfs\"], os=[\"win32\"]). Returns the new session id.")]
+    #[tool(
+        description = "Attach to a process by name and create a new scan session. `connectors` and `os` are memflow chain entries (e.g. connectors=[\"qemu_procfs\"], os=[\"win32\"]). Returns the new session id."
+    )]
     async fn attach_process(
         &self,
         Parameters(args): Parameters<AttachProcessArgs>,
@@ -48,10 +47,14 @@ impl ScanflowServer {
             .mgr
             .attach_process(&args.connectors, &args.os, &args.program)
             .map_err(mcp_err)?;
-        text_result(serde_json::json!({ "session_id": id, "kind": "process", "program": args.program }))
+        text_result(
+            serde_json::json!({ "session_id": id, "kind": "process", "program": args.program }),
+        )
     }
 
-    #[tool(description = "Attach to a raw physical memory view via a connector chain and create a new view session (no process-only operations). Returns the new session id.")]
+    #[tool(
+        description = "Attach to a raw physical memory view via a connector chain and create a new view session (no process-only operations). Returns the new session id."
+    )]
     async fn attach_view(
         &self,
         Parameters(args): Parameters<AttachViewArgs>,
@@ -63,7 +66,9 @@ impl ScanflowServer {
         text_result(serde_json::json!({ "session_id": id, "kind": "view" }))
     }
 
-    #[tool(description = "List running processes of an OS chain without creating a session. Useful to discover the target `program` name before `attach_process`.")]
+    #[tool(
+        description = "List running processes of an OS chain without creating a session. Useful to discover the target `program` name before `attach_process`."
+    )]
     async fn list_processes(
         &self,
         Parameters(args): Parameters<ChainArgs>,
@@ -97,18 +102,24 @@ impl ScanflowServer {
 
     // ---- value scanning (shared) ----
 
-    #[tool(description = "First-pass value scan: scan the session's whole address space for `value` parsed as `type_name` (str, str_utf16, i8, u8, i16, u16, i32, u32, i64, u64, i128, u128, f32, f64). Stores the matches and returns the count plus the first few addresses.")]
+    #[tool(
+        description = "First-pass value scan: scan the session's whole address space for `value` parsed as `type_name` (str, str_utf16, i8, u8, i16, u16, i32, u32, i64, u64, i128, u128, f32, f64). Stores the matches and returns the count plus the first few addresses."
+    )]
     async fn scan_value(
         &self,
         Parameters(args): Parameters<ScanValueArgs>,
     ) -> Result<CallToolResult, McpError> {
         let session = self.require_session(&args.session_id)?;
         let mut g = session.lock().await;
-        let res = g.scan_value(&args.type_name, &args.value).map_err(mcp_err)?;
+        let res = g
+            .scan_value(&args.type_name, &args.value)
+            .map_err(mcp_err)?;
         text_result(scan_summary(&res, &g))
     }
 
-    #[tool(description = "Filter the session's existing matches against a new `value` (parsed with the currently selected type). Requires a prior `scan_value` or `set_type`.")]
+    #[tool(
+        description = "Filter the session's existing matches against a new `value` (parsed with the currently selected type). Requires a prior `scan_value` or `set_type`."
+    )]
     async fn filter_value(
         &self,
         Parameters(args): Parameters<FilterValueArgs>,
@@ -119,7 +130,9 @@ impl ScanflowServer {
         text_result(scan_summary(&res, &g))
     }
 
-    #[tool(description = "Scan memory for an IDA-style byte pattern (space-separated hex bytes, `?` or `??` for wildcards). Replaces the match list with the hits.")]
+    #[tool(
+        description = "Scan memory for an IDA-style byte pattern (space-separated hex bytes, `?` or `??` for wildcards). Replaces the match list with the hits."
+    )]
     async fn sig_scan(
         &self,
         Parameters(args): Parameters<SigScanArgs>,
@@ -130,7 +143,9 @@ impl ScanflowServer {
         text_result(scan_summary(&res, &g))
     }
 
-    #[tool(description = "Read up to `max` matches back as typed values (requires a selected type).")]
+    #[tool(
+        description = "Read up to `max` matches back as typed values (requires a selected type)."
+    )]
     async fn get_matches(
         &self,
         Parameters(args): Parameters<GetMatchesArgs>,
@@ -150,7 +165,9 @@ impl ScanflowServer {
 
     // ---- raw memory read/write (shared) ----
 
-    #[tool(description = "Read `len` raw bytes at `addr` (hex). Returns the bytes as a hex string.")]
+    #[tool(
+        description = "Read `len` raw bytes at `addr` (hex). Returns the bytes as a hex string."
+    )]
     async fn read_memory(
         &self,
         Parameters(args): Parameters<ReadMemoryArgs>,
@@ -166,7 +183,9 @@ impl ScanflowServer {
         }))
     }
 
-    #[tool(description = "Write raw `data` (hex string, e.g. \"4D 5A\" or \"4D5A\") to `addr` (hex).")]
+    #[tool(
+        description = "Write raw `data` (hex string, e.g. \"4D 5A\" or \"4D5A\") to `addr` (hex)."
+    )]
     async fn write_memory(
         &self,
         Parameters(args): Parameters<WriteMemoryArgs>,
@@ -190,7 +209,9 @@ impl ScanflowServer {
         text_result(serde_json::json!({ "reset": true, "session_id": args.session_id }))
     }
 
-    #[tool(description = "Select / re-interpret the session's value type. `len` is required only for unsized types (str, str_utf16).")]
+    #[tool(
+        description = "Select / re-interpret the session's value type. `len` is required only for unsized types (str, str_utf16)."
+    )]
     async fn set_type(
         &self,
         Parameters(args): Parameters<SetTypeArgs>,
@@ -229,20 +250,22 @@ impl ScanflowServer {
         text_result(serde_json::json!({ "pointer_map": "built", "session_id": args.session_id }))
     }
 
-    #[tool(description = "Find global variables referenced by code. `module` restricts the search to a single module; omit for all modules. Returns the count. (process sessions only)")]
+    #[tool(
+        description = "Find global variables referenced by code. `module` restricts the search to a single module; omit for all modules. Returns the count. (process sessions only)"
+    )]
     async fn collect_globals(
         &self,
         Parameters(args): Parameters<CollectGlobalsArgs>,
     ) -> Result<CallToolResult, McpError> {
         let session = self.require_session(&args.session_id)?;
         let mut g = session.lock().await;
-        let n = g
-            .collect_globals(args.module.as_deref())
-            .map_err(mcp_err)?;
+        let n = g.collect_globals(args.module.as_deref()).map_err(mcp_err)?;
         text_result(serde_json::json!({ "globals": n, "session_id": args.session_id }))
     }
 
-    #[tool(description = "Generate IDA-style code signatures for a global `addr` (hex). Run `collect_globals` first. (process sessions only)")]
+    #[tool(
+        description = "Generate IDA-style code signatures for a global `addr` (hex). Run `collect_globals` first. (process sessions only)"
+    )]
     async fn sigmaker(
         &self,
         Parameters(args): Parameters<AddrSessionArgs>,
@@ -254,7 +277,9 @@ impl ScanflowServer {
         text_result(serde_json::json!({ "signatures": sigs }))
     }
 
-    #[tool(description = "Find pointer chains from binary globals (or the whole pointer map) to the current matches. `use_disasm` uses disassembler-found globals. `lrange`/`urange` bound the address delta; `max_depth` limits the chain depth; optional `filter` (hex) keeps only chains starting at that address. (process sessions only)")]
+    #[tool(
+        description = "Find pointer chains from binary globals (or the whole pointer map) to the current matches. `use_disasm` uses disassembler-found globals. `lrange`/`urange` bound the address delta; `max_depth` limits the chain depth; optional `filter` (hex) keeps only chains starting at that address. (process sessions only)"
+    )]
     async fn offset_scan(
         &self,
         Parameters(args): Parameters<OffsetScanArgs>,
@@ -266,7 +291,13 @@ impl ScanflowServer {
         let session = self.require_session(&args.session_id)?;
         let mut g = session.lock().await;
         let matches = g
-            .offset_scan(args.use_disasm, args.lrange, args.urange, args.max_depth, filter)
+            .offset_scan(
+                args.use_disasm,
+                args.lrange,
+                args.urange,
+                args.max_depth,
+                filter,
+            )
             .map_err(mcp_err)?;
         text_result(serde_json::json!({
             "count": matches.len(),
@@ -296,21 +327,20 @@ impl ScanflowServer {
 #[tool_handler]
 impl ServerHandler for ScanflowServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(
-            ServerCapabilities::builder()
-                .enable_tools()
-                .build(),
-        )
-        .with_server_info(Implementation::new("scanflow-mcp", env!("CARGO_PKG_VERSION")))
-        .with_protocol_version(ProtocolVersion::V_2024_11_05)
-        .with_instructions(
-            "scanflow MCP server: memory scanning over memflow. Use `attach_process` or \
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(Implementation::new(
+                "scanflow-mcp",
+                env!("CARGO_PKG_VERSION"),
+            ))
+            .with_protocol_version(ProtocolVersion::V_2024_11_05)
+            .with_instructions(
+                "scanflow MCP server: memory scanning over memflow. Use `attach_process` or \
              `attach_view` to create a session, then `scan_value`/`filter_value`/`sig_scan` \
              to find memory, `get_matches`/`read_memory` to read it, and `offset_scan`/\
              `sigmaker` to build pointers/signatures. All session-scoped tools take a \
              `session_id`."
-                .to_string(),
-        )
+                    .to_string(),
+            )
     }
 
     async fn initialize(
@@ -345,15 +375,19 @@ fn scan_summary(res: &scanflow::ScanResult, g: &AnySession) -> serde_json::Value
 
 fn parse_addr(s: &str) -> Result<memflow::types::Address, McpError> {
     let s = s.trim().trim_start_matches("0x");
-    u64::from_str_radix(s, 16)
-        .map(Address::from)
-        .map_err(|e| McpError::new(ErrorCode::INVALID_PARAMS, format!("invalid address `{}`: {}", s, e), None))
+    u64::from_str_radix(s, 16).map(Address::from).map_err(|e| {
+        McpError::new(
+            ErrorCode::INVALID_PARAMS,
+            format!("invalid address `{}`: {}", s, e),
+            None,
+        )
+    })
 }
 
 fn parse_hex_bytes(s: &str) -> Result<Vec<u8>, McpError> {
     let cleaned: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     let s = cleaned.trim_start_matches("0x");
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err(McpError::new(
             ErrorCode::INVALID_PARAMS,
             "hex byte string has odd length".to_string(),

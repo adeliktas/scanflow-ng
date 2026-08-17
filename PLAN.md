@@ -1,7 +1,8 @@
 # scanflow-ng Modernization & MCP Integration Plan
 
-> Status: **DRAFT — awaiting user sign-off**
+> Status: **Phases 0–3 DONE. Phase 4 in progress.**
 > Baseline tag: `v0.2.1-baseline` (original upstream snapshot, committed)
+> Checkpoint tags: `phase1-core-refactor`, `phase2-cli`, `phase3-mcp`
 > Methodology: PDCA (Plan-Do-Check-Act) with git versioning at each phase.
 
 ---

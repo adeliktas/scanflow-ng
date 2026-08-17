@@ -55,7 +55,7 @@ impl Sigstate<'_> {
         | Ok(OpKind::FarBranch16)
         | Ok(OpKind::FarBranch32) = instr.try_op_kind(0)
         {
-            Self::mask_branch(&offsets, mask, 1);
+            Self::mask_branch(offsets, mask, 1);
         }
     }
 
@@ -204,7 +204,7 @@ impl Sigmaker {
             .iter()
             .map(|(start_ip, buf)| {
                 let mut decoder = Decoder::new(bitness, buf, DecoderOptions::NONE);
-                decoder.set_ip(start_ip.to_umem() as u64);
+                decoder.set_ip(start_ip.to_umem());
                 Sigstate {
                     start_ip: *start_ip,
                     buf,

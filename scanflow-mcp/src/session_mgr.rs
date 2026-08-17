@@ -14,8 +14,8 @@
 use std::sync::Mutex as StdMutex;
 
 use dashmap::DashMap;
-use memflow::prelude::v1::*;
 use memflow::mem::phys_mem::PhysicalMemoryView;
+use memflow::prelude::v1::*;
 use tokio::sync::Mutex;
 
 use scanflow::Session;
@@ -232,17 +232,13 @@ impl SessionManager {
     }
 
     /// List running processes of an OS without creating a session.
-    pub fn list_processes(
-        &self,
-        connectors: &[String],
-        os: &[String],
-    ) -> Result<Vec<ProcessInfo>> {
+    pub fn list_processes(&self, connectors: &[String], os: &[String]) -> Result<Vec<ProcessInfo>> {
         let chain = build_os_chain(connectors, os)?;
         let mut os_inst = {
             let mut inv = self.inventory.lock().unwrap();
             inv.builder().os_chain(chain).build()?
         };
-        Ok(os_inst.process_info_list()?)
+        os_inst.process_info_list()
     }
 
     fn store(&self, session: AnySession) -> Result<String> {
@@ -254,7 +250,9 @@ impl SessionManager {
 
     /// Look up a shared session by id.
     pub fn get(&self, id: &str) -> Option<SharedSession> {
-        self.sessions.get(id).map(|r| std::sync::Arc::clone(r.value()))
+        self.sessions
+            .get(id)
+            .map(|r| std::sync::Arc::clone(r.value()))
     }
 
     /// Remove (drop) a session by id. Returns true if it existed.
@@ -270,7 +268,11 @@ impl SessionManager {
                 let s = r.value().blocking_lock();
                 SessionInfo {
                     id: r.key().clone(),
-                    kind: if s.is_process() { "process".into() } else { "view".into() },
+                    kind: if s.is_process() {
+                        "process".into()
+                    } else {
+                        "view".into()
+                    },
                     target: s.target_name(),
                 }
             })
@@ -291,7 +293,10 @@ fn build_os_chain<'a>(connectors: &'a [String], os: &'a [String]) -> Result<OsCh
     OsChain::new(conn_it(), os_it())
 }
 
-fn build_connector_chain<'a>(connectors: &'a [String], os: &'a [String]) -> Result<ConnectorChain<'a>> {
+fn build_connector_chain<'a>(
+    connectors: &'a [String],
+    os: &'a [String],
+) -> Result<ConnectorChain<'a>> {
     let conn_it = || connectors.iter().enumerate().map(|(i, s)| (i, s.as_str()));
     let os_it = || os.iter().enumerate().map(|(i, s)| (i, s.as_str()));
     ConnectorChain::new(conn_it(), os_it())

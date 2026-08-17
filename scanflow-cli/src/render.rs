@@ -54,7 +54,11 @@ pub fn print_offset_matches(matches: &[OffsetMatch], max: usize) {
 
 /// Format a raw byte buffer as a hexdump (address + bytes), for `read_memory`.
 pub fn print_hexdump(base: Address, data: &[u8], bytes_per_line: usize) {
-    let bytes_per_line = if bytes_per_line == 0 { 16 } else { bytes_per_line };
+    let bytes_per_line = if bytes_per_line == 0 {
+        16
+    } else {
+        bytes_per_line
+    };
     for (i, chunk) in data.chunks(bytes_per_line).enumerate() {
         let addr = base + (i * bytes_per_line) as umem;
         print!("{:x}: ", addr);

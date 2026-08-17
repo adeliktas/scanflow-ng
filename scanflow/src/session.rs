@@ -208,8 +208,7 @@ impl<T: MemoryView> Session<T> {
         let pattern = sig_scan::parse_pattern(pattern_input).ok_or(ErrorKind::InvalidArgument)?;
         let compiled = CompiledPattern::new(pattern).ok_or(ErrorKind::InvalidArgument)?;
 
-        let ranges =
-            (self.funcs.maps)(&mut self.memory, 0x1000, Address::NULL, Address::INVALID);
+        let ranges = (self.funcs.maps)(&mut self.memory, 0x1000, Address::NULL, Address::INVALID);
 
         let start = Instant::now();
         let mut matches = Vec::new();
@@ -221,7 +220,9 @@ impl<T: MemoryView> Session<T> {
         let _ = start;
 
         self.value_scanner.reset();
-        self.value_scanner.matches_mut().extend(matches.iter().copied());
+        self.value_scanner
+            .matches_mut()
+            .extend(matches.iter().copied());
         self.typename = None;
 
         Ok(ScanResult {
@@ -260,10 +261,7 @@ impl<T: MemoryView> Session<T> {
     where
         T: MemoryView + Clone,
     {
-        let type_name = self
-            .typename
-            .clone()
-            .ok_or(ErrorKind::Uninitialized)?;
+        let type_name = self.typename.clone().ok_or(ErrorKind::Uninitialized)?;
         let ty = types::find_type(&type_name).ok_or(ErrorKind::InvalidArgument)?;
         let data = (ty.parse)(value).ok_or(ErrorKind::InvalidArgument)?;
 
@@ -278,18 +276,14 @@ impl<T: MemoryView> Session<T> {
 
     /// Read back up to `max` matches as typed display strings.
     pub fn read_matches(&mut self, max: usize) -> Result<Vec<MatchDisplay>> {
-        let typename = self
-            .typename
-            .as_ref()
-            .ok_or(ErrorKind::Uninitialized)?;
+        let typename = self.typename.as_ref().ok_or(ErrorKind::Uninitialized)?;
         let buf_len = self.buf_len;
 
         let mut out = Vec::new();
         for &m in self.value_scanner.matches().iter().take(max) {
             let mut buf = vec![0u8; buf_len];
             self.memory.read_raw_into(m, &mut buf).data_part()?;
-            let value =
-                types::print_value(&buf, typename).ok_or(ErrorKind::InvalidArgument)?;
+            let value = types::print_value(&buf, typename).ok_or(ErrorKind::InvalidArgument)?;
             out.push(MatchDisplay { address: m, value });
         }
         Ok(out)
@@ -378,11 +372,8 @@ impl<T: Process + MemoryView + Clone> Session<T> {
                 self.disasm.globals(),
             )
         } else {
-            self.pointer_map.find_matches(
-                (lrange, urange),
-                max_depth,
-                self.value_scanner.matches(),
-            )
+            self.pointer_map
+                .find_matches((lrange, urange), max_depth, self.value_scanner.matches())
         };
         let _ = start;
 
@@ -390,10 +381,7 @@ impl<T: Process + MemoryView + Clone> Session<T> {
             .into_iter()
             .filter(|(_, chain)| {
                 if let Some(a) = filter_addr {
-                    chain
-                        .first()
-                        .map(|(s, _)| *s == a)
-                        .unwrap_or(false)
+                    chain.first().map(|(s, _)| *s == a).unwrap_or(false)
                 } else {
                     true
                 }
@@ -405,7 +393,7 @@ impl<T: Process + MemoryView + Clone> Session<T> {
 
     /// List loaded modules in the target process.
     pub fn list_modules(&mut self) -> Result<Vec<ModuleInfo>> {
-        Ok(self.memory.module_list()?)
+        self.memory.module_list()
     }
 }
 

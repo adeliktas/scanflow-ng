@@ -7,7 +7,7 @@
 //! transport can be bridged later with a tool like `mcporter`/`supergateway`.
 
 use anyhow::Result;
-use rmcp::{ServiceExt, transport::stdio};
+use rmcp::{transport::stdio, ServiceExt};
 use tracing_subscriber::{self, EnvFilter};
 
 mod server;

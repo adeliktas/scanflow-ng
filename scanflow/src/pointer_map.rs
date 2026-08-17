@@ -48,7 +48,7 @@ impl PointerMap {
         let pb = PBar::new(
             mem_map
                 .iter()
-                .map(|CTup3(_, size, _)| size.to_umem() as u64)
+                .map(|CTup3(_, size, _)| size.to_umem())
                 .sum::<u64>(),
             true,
         );
@@ -59,7 +59,6 @@ impl PointerMap {
         self.map
             .par_extend(mem_map.par_iter().flat_map(|&CTup3(address, size, _)| {
                 (0..size)
-                    .into_iter()
                     .step_by(0x1000)
                     .par_bridge()
                     .filter_map(|off| {
@@ -132,6 +131,7 @@ impl PointerMap {
         &self.pointers
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn walk_down_range(
         &self,
         addr: Address,

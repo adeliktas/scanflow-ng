@@ -59,7 +59,7 @@ impl ValueScanner {
             let pb = PBar::new(
                 self.mem_map
                     .iter()
-                    .map(|CTup3(_, size, _)| *size as u64)
+                    .map(|CTup3(_, size, _)| *size)
                     .sum::<u64>(),
                 true,
             );
@@ -70,7 +70,6 @@ impl ValueScanner {
             self.matches.par_extend(self.mem_map.par_iter().flat_map(
                 |&CTup3(address, size, _)| {
                     (0..size)
-                        .into_iter()
                         .step_by(0x1000)
                         .par_bridge()
                         .filter_map(|off| {
@@ -109,7 +108,7 @@ impl ValueScanner {
         } else {
             const CHUNK_SIZE: usize = 0x100;
 
-            let old_matches = std::mem::replace(&mut self.matches, vec![]);
+            let old_matches = std::mem::take(&mut self.matches);
 
             let pb = PBar::new(old_matches.len() as u64, false);
 

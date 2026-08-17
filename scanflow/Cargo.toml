@@ -22,3 +22,6 @@ memchr = "2.8"
 [features]
 default = []
 progress_bar = ["pbr"]
+
+[dev-dependencies]
+memflow = { version = "0.2", features = ["dummy_mem"] }

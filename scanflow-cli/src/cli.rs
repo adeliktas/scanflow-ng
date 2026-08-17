@@ -138,7 +138,7 @@ pub enum Command {
 pub fn parse_address(input: &str) -> std::result::Result<Address, String> {
     let s = input.trim().trim_start_matches("0x");
     u64::from_str_radix(s, 16)
-        .or_else(|_| u64::from_str_radix(input.trim(), 10))
+        .or_else(|_| input.trim().parse::<u64>())
         .map(Address::from)
         .map_err(|e| format!("invalid address `{}`: {}", input, e))
 }
