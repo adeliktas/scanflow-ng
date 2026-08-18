@@ -126,3 +126,16 @@ See [`PLAN.md`](PLAN.md) for the full modernization plan and design notes.
 ## License
 
 MIT (see [LICENSE](LICENSE)).
+## Skills (for agents)
+
+- [`scanflow-gdb-write-watch`](.pi/skills/scanflow-gdb-write-watch/SKILL.md) —
+  the CheatEngine-style **"find what writes to this address"** workflow for a
+  QEMU/KVM Windows/Linux guest: scanflow MCP locates the address (scan → filter
+  → 1 match), then a minimal-freeze GDB hardware write-watchpoint
+  ([`scripts/gdb_watch.sh`](.pi/skills/scanflow-gdb-write-watch/scripts/gdb_watch.sh))
+  via the QEMU gdb stub dumps all registers + disasm of the writer with only a
+  millisecond-scale VM pause. Load with `/skill:scanflow-gdb-write-watch`. Full
+  context in
+  [`references/PROCEDURE.md`](.pi/skills/scanflow-gdb-write-watch/references/PROCEDURE.md);
+  MCP wiring in
+  [`references/MCP-SETUP.md`](.pi/skills/scanflow-gdb-write-watch/references/MCP-SETUP.md).
